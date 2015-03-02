@@ -1,0 +1,57 @@
+{% extends "exactonline_base.tmpl" %}
+{% block data %}
+<Items>
+    {% for item in items %}
+    {% if item['sku'] %}
+    <Item code="{{ item['sku'] }}">
+        <Description>{{ item['ex_DescriptionDescription'] }}</Description>
+        <ExtraDescription>{{ item['ex_ExtraTextDescription'] }}</ExtraDescription>
+        <IsSalesItem>{{ item['ex_IsSalesItem'] }}</IsSalesItem>
+        <IsStockItem>{{ item['ex_IsStockItem'] }}</IsStockItem>
+        <IsPurchaseItem>{{ item['ex_IsPurchaseItem'] }}</IsPurchaseItem>
+        <IsOnDemandItem>{{ item['ex_IsOnDemandItem'] }}</IsOnDemandItem>
+        <IsWebshopItem>{{ item['ex_IsWebshopItem'] }}</IsWebshopItem>
+        <IsSerialItem>{{ item['ex_IsSerialItem'] }}</IsSerialItem>
+        <IsBatchItem>{{ item['ex_IsBatchItem'] }}</IsBatchItem>
+        <Assortment code="{{ item['ex_ItemGroup'] }}"/>
+        <Sales>
+            <Price>
+                <Currency code="{{ item['ex_SalesCurrency'] }}"/>
+                <Value>{{ item['ex_SalesPrice'] }}</Value>
+                <VAT code="{{ item['ex_SalesVATcode'] }}"></VAT>
+            </Price>
+        </Sales>
+        <ItemAccounts>
+            {% if item['ex_Suppliercode'] %}
+            <ItemAccount>
+                <Account code="{{ item['ex_Suppliercode'] }}"/>
+                <SupplierItemCode>{{ item['ex_Suppliersitemcode'] }}</SupplierItemCode>
+                <Purchase>
+                    <Price>
+                        <Currency code="{{ item['ex_PurchaseCurrency'] }}"/>
+                        {% if item['ex_Purchaseprice'] %}
+                        <Value>{{ item['ex_Purchaseprice'] }}</Value>
+                        {% else %}
+                        <Value>0</Value>
+                        {% endif %}
+                        <VAT code="{{ item['ex_PurchaseVATcode'] }}"></VAT>
+                    </Price>
+                    <Unit code="{{ item['ex_Purchaseunit'] }}"/>
+                    <LeadDays>{{ item['ex_purchase_lead_time'] }}</LeadDays>
+                </Purchase>
+            </ItemAccount>
+            {% endif %}
+        </ItemAccounts>
+        <ItemWarehouses>
+            {% if item['ex_warehouse'] %}
+            <ItemWarehouse>
+                <Warehouse code="{{ item['ex_warehouse'] }}"/>
+                <ReorderPoint>0</ReorderPoint>
+            </ItemWarehouse>
+            {% endif %}
+        </ItemWarehouses>
+    </Item>
+    {% endif %}
+    {% endfor %}
+</Items>
+{% endblock %}

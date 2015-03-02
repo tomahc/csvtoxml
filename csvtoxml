@@ -1,0 +1,213 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import csv
+import re
+from jinja2 import Environment, FileSystemLoader
+from jinja2 import exceptions
+import argparse
+import os.path
+import codecs
+import sys
+from os import makedirs, removedirs, remove
+from datetime import datetime
+from zipfile import ZipFile, ZIP_DEFLATED
+import itertools
+from xml.sax.saxutils import escape as xmlescape
+
+
+class TemplateNotFound(Exception):
+    pass
+
+
+class UnknownSelector(Exception):
+    pass
+
+
+class TooManyArgumentsException(Exception):
+    pass
+
+
+def read_csv(filename, required_fields=None):
+
+    def map_headers(header):
+        header_mapping = {}
+
+        if required_fields is None:
+            for head_name in header:
+                header_mapping[head_name] = header.index(head_name)
+
+        else:
+            for required_field in required_fields:
+                try:
+                    header_mapping[required_field] = header.index(required_field)
+
+                except ValueError:
+                    print "Column <{0}> does not exist! Skipping..".format(required_field)
+
+        return header_mapping
+
+    with open(filename, 'r') as export_file:
+        csv_export_file = csv.reader(export_file, delimiter=';')
+        csv_header = next(csv_export_file)
+
+        mapped_headers = map_headers(csv_header)
+
+        for row in csv_export_file:
+            data = {}
+
+            for header_name, fieldpos in mapped_headers.iteritems():
+
+                # create numbers in dotted notation for xml scheme combatibility
+                row[fieldpos] = re.sub(r'(\d+),(\d+)', '\g<1>.\g<2>', row[fieldpos])
+
+                # escape xml special characters
+                data[header_name] = xmlescape(row[fieldpos]).decode('latin_1')
+
+            yield data
+
+
+def create_xml(template, data, xml_filename):
+    """create an xml file by using a 'template', fill it with 'data' and dump content to 'xml_filename'"""
+
+    template_dir = FileSystemLoader('templates')
+    env = Environment(loader=template_dir)
+
+    try:
+        env.get_template(template)
+
+    except exceptions.TemplateNotFound:
+        raise TemplateNotFound('Template not found!')
+
+    print "creating {0} with {1} elements ".format(xml_filename, len(data))
+
+    with codecs.open(xml_filename, 'w', encoding='latin_1') as xmlfile:
+        xmlfile.write(env.get_template(template).render(items=data))
+
+
+def parse_selectors(selector):
+    """selector can be either a file with its template in 1st line identified by '::templatename' and columns to select
+    from a csv file, or a string, passing the template name directly without cherrypicking csv columns"""
+
+    # try to handle it as a file
+    try:
+        with open(selector, 'r') as rfile:
+            template = next(rfile)
+            if not template.startswith('::'):
+                raise TemplateNotFound('Template not found!')
+
+            template_name = template[2:].strip('\n')
+
+            selected_rows = [line.strip('\n') for line in rfile]
+
+            return template_name, selected_rows
+
+    except IOError:
+        pass
+
+    # Fallback to string with templates name as its argument
+    if not isinstance(selector, basestring):
+        raise UnknownSelector('Unknown Selector')
+
+    template_name = selector
+    selected_rows = None
+
+    return template_name, selected_rows
+
+
+def new_filename(filename, filename_counter_start=None, increment_first=False):
+    """returns a not existing filename"""
+
+    def generate():
+        f_name, f_ext = os.path.splitext(filename)
+
+        try:
+            f_name_prefix, f_name_infix = f_name.split('.', 1)
+
+        except ValueError:
+            f_name_prefix, f_name_infix = f_name, file_inc_infix
+
+        return '.'.join((f_name_prefix, str(file_inc_infix))) + f_ext
+
+    file_inc_infix = filename_counter_start or 1
+
+    if increment_first:
+        n_filename = generate()
+
+    else:
+        n_filename = filename
+
+    while os.path.exists(n_filename):
+        n_filename = generate()
+        file_inc_infix += 1
+
+    return n_filename
+
+
+def zip_files(files, archive_name):
+
+    with ZipFile(archive_name, 'w') as zipfd:
+        for filename in files:
+            zipfd.write(filename, compress_type=ZIP_DEFLATED)
+
+    print '{0} created'.format(archive_name)
+
+
+def grouper(iterable, n, filler=''):
+    """spawn the iterables iterator n times and return n chunks of data per cycle"""
+
+    iterators = [iter(iterable)] * n
+
+    # the following works like this:
+    #    tuple(map(next, iterators))
+    return itertools.izip_longest(*iterators, fillvalue=filler)
+
+
+def run(infile=None, outfile=None, selector=None, elements=None):
+
+    template_name, selectors = parse_selectors(selector)
+
+    if '/' in outfile:
+        dirname, filename = os.path.split(outfile)
+        if not os.path.exists(dirname):
+            makedirs(dirname)
+
+    created_files = []
+
+    for data in grouper(read_csv(infile, selectors), elements, filler=''):
+
+        inc_filename = new_filename(outfile)
+        created_files.append(inc_filename)
+        create_xml(template_name, data, inc_filename)
+
+    archive_name = new_filename('-'.join(('imports', datetime.now().strftime('%d-%m-%Y'))) + '.zip')
+
+    zip_files(created_files, archive_name)
+
+    for filename in created_files:
+        remove(filename)
+
+    # FIXME: possible ref before assignment
+    try:
+        removedirs(dirname)
+
+    except UnboundLocalError:
+        pass
+
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--infile', metavar='CSV')
+    parser.add_argument('-o', '--outfile', metavar='XML')
+    parser.add_argument('-s', '--selector', metavar='selector')
+    parser.add_argument('-e', '--elements', metavar='num_of_elements', type=int, default=1000,
+                        help='Elements per XML file')
+
+    args = parser.parse_args()
+    arguments = vars(args)
+    if len(sys.argv[1:]) == 0:
+        parser.print_usage()
+        sys.exit(0)
+
+    run(**arguments)
