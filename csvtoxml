@@ -176,7 +176,7 @@ def run(infile=None, outfile=None, selector=None, elements=None):
 
     for data in grouper(read_csv(infile, selectors), elements, filler=''):
 
-        inc_filename = new_filename(outfile)
+        inc_filename = new_filename(outfile, increment_first=True)
         created_files.append(inc_filename)
         create_xml(template_name, data, inc_filename)
 
